@@ -47,7 +47,7 @@ class ResultWindow(QMainWindow):
         width_label = QLabel("Width:")
         self.width_input = QSpinBox()
         self.width_input.setRange(100, 1200)
-        self.width_input.setValue(600)
+        self.width_input.setValue(1200)
         self.width_input.valueChanged.connect(self.on_size_changed)
         size_layout.addWidget(width_label)
         size_layout.addWidget(self.width_input)
@@ -56,7 +56,7 @@ class ResultWindow(QMainWindow):
         height_label = QLabel("Height:")
         self.height_input = QSpinBox()
         self.height_input.setRange(100, 1000)
-        self.height_input.setValue(400)
+        self.height_input.setValue(160)
         self.height_input.valueChanged.connect(self.on_size_changed)
         size_layout.addWidget(height_label)
         size_layout.addWidget(self.height_input)
@@ -114,8 +114,10 @@ class ResultWindow(QMainWindow):
         
     def update_text(self, text):
         try:
+            # Join lines with spaces to improve translation accuracy
+            processed_text = " ".join(text.splitlines())
             # Translate the text to Vietnamese
-            translated = self.translator.translate(text, src='en', dest='vi')
+            translated = self.translator.translate(processed_text, src='en', dest='vi')
             # Update the translated text display
             self.translated_text_display.setText(translated.text)
         except Exception as e:
@@ -203,7 +205,7 @@ class TrulyTransparentWindow(QWidget):
         
         # Set window properties
         self.setWindowTitle('English Text Detector')
-        self.setGeometry(100, 100, 600, 400)
+        self.setGeometry(100, 100, 1200, 160)
         
         # Emit initial size
         self.size_changed.emit(self.width(), self.height())
