@@ -1,7 +1,7 @@
 import sys
 import time
 import os
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QMessageBox, QTextEdit, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QMessageBox, QTextEdit, QVBoxLayout, QWidget, QHBoxLayout, QSpinBox, QPushButton
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QRect
 from PyQt5.QtGui import QFont, QPainter, QPen, QColor
 import numpy as np
@@ -21,9 +21,13 @@ except ImportError:
     TESSERACT_AVAILABLE = False
 
 class ResultWindow(QMainWindow):
+    resize_scanner = pyqtSignal(int, int)
+    toggle_scanning = pyqtSignal(bool)
+    
     def __init__(self):
         super().__init__()
         self.translator = Translator()
+        self.scanning_active = True
         self.initUI()
         
     def initUI(self):
@@ -35,6 +39,34 @@ class ResultWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         layout = QVBoxLayout(central_widget)
+        
+        # Create layout for width and height controls
+        size_layout = QHBoxLayout()
+        
+        # Width input
+        width_label = QLabel("Width:")
+        self.width_input = QSpinBox()
+        self.width_input.setRange(100, 1200)
+        self.width_input.setValue(600)
+        self.width_input.valueChanged.connect(self.on_size_changed)
+        size_layout.addWidget(width_label)
+        size_layout.addWidget(self.width_input)
+        
+        # Height input
+        height_label = QLabel("Height:")
+        self.height_input = QSpinBox()
+        self.height_input.setRange(100, 1000)
+        self.height_input.setValue(400)
+        self.height_input.valueChanged.connect(self.on_size_changed)
+        size_layout.addWidget(height_label)
+        size_layout.addWidget(self.height_input)
+        
+        layout.addLayout(size_layout)
+        
+        # Add pause/resume button
+        self.scan_button = QPushButton("Pause Scan")
+        self.scan_button.clicked.connect(self.toggle_scan)
+        layout.addWidget(self.scan_button)
         
         # Create label for the translation
         translated_label = QLabel("Vietnamese Translation:")
@@ -52,6 +84,33 @@ class ResultWindow(QMainWindow):
         
         # Show the window
         self.show()
+    
+    def toggle_scan(self):
+        # Toggle scanning state
+        self.scanning_active = not self.scanning_active
+        
+        # Update button text
+        self.scan_button.setText("Resume Scan" if not self.scanning_active else "Pause Scan")
+        
+        # Emit signal to transparent window
+        self.toggle_scanning.emit(self.scanning_active)
+    
+    def update_scanner_size_inputs(self, width, height):
+        # Update the input fields without triggering valueChanged
+        self.width_input.blockSignals(True)
+        self.height_input.blockSignals(True)
+        
+        self.width_input.setValue(width)
+        self.height_input.setValue(height)
+        
+        self.width_input.blockSignals(False)
+        self.height_input.blockSignals(False)
+    
+    def on_size_changed(self):
+        # Emit signal to resize the scanner window
+        width = self.width_input.value()
+        height = self.height_input.value()
+        self.resize_scanner.emit(width, height)
         
     def update_text(self, text):
         try:
@@ -64,12 +123,17 @@ class ResultWindow(QMainWindow):
             print(f"Translation error: {e}")
             
     def update_status(self, is_scanning):
+        self.scanning_active = is_scanning
         status = "Active" if is_scanning else "Paused"
         self.status_label.setText(f"Scanning: {status}")
+        
+        # Update button text to match the current state
+        self.scan_button.setText("Pause Scan" if is_scanning else "Resume Scan")
 
 class TrulyTransparentWindow(QWidget):
     text_detected = pyqtSignal(str)
     scan_status_changed = pyqtSignal(bool)
+    size_changed = pyqtSignal(int, int)
     
     def __init__(self, result_window):
         super().__init__()
@@ -81,6 +145,9 @@ class TrulyTransparentWindow(QWidget):
         # Connect the signals to the result window
         self.text_detected.connect(self.result_window.update_text)
         self.scan_status_changed.connect(self.result_window.update_status)
+        self.size_changed.connect(self.result_window.update_scanner_size_inputs)
+        self.result_window.resize_scanner.connect(self.set_new_size)
+        self.result_window.toggle_scanning.connect(self.set_scanning_state)
         
         # Check for Tesseract installation first
         if TESSERACT_AVAILABLE:
@@ -118,6 +185,11 @@ class TrulyTransparentWindow(QWidget):
         self.timer = QTimer()
         self.timer.timeout.connect(self.detect_text)
         self.timer.start(1000)  # Detect text every second
+    
+    def set_scanning_state(self, is_scanning):
+        self.scanning = is_scanning
+        self.scan_status_changed.emit(is_scanning)
+        self.update()  # Redraw to update border color
         
     def initUI(self):
         # Set window flags
@@ -133,8 +205,20 @@ class TrulyTransparentWindow(QWidget):
         self.setWindowTitle('English Text Detector')
         self.setGeometry(100, 100, 600, 400)
         
+        # Emit initial size
+        self.size_changed.emit(self.width(), self.height())
+        
         # Show the window
         self.show()
+    
+    def set_new_size(self, width, height):
+        # Resize the window while maintaining position
+        self.resize(width, height)
+    
+    def resizeEvent(self, event):
+        # When resized, emit the new size
+        self.size_changed.emit(self.width(), self.height())
+        super().resizeEvent(event)
     
     def paintEvent(self, event):
         # Draw only a red border, nothing else
